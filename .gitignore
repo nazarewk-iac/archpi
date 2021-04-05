@@ -1,0 +1,5 @@
+*.dapper*
+!Dockerfile.dapper
+
+/out
+/out-replace

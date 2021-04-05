@@ -1,0 +1,23 @@
+#!/usr/bin/env python
+import itertools
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+out = [Path(e) for e in os.environ['DAPPER_OUTPUT'].split()]
+uid = int(os.environ['DAPPER_UID'])
+gid = int(os.environ['DAPPER_GID'])
+scripts = Path('scripts')
+
+for p in out:
+    p.mkdir(parents=True, exist_ok=True)
+
+script = scripts / sys.argv[1]
+args = sys.argv
+if script.exists():
+    args = [script, *sys.argv[2:]]
+subprocess.run(args)
+
+for path in itertools.chain(Path.cwd().rglob('*'), out):
+    os.chown(path, uid, gid)

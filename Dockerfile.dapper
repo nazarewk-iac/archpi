@@ -1,0 +1,18 @@
+FROM python:3.9
+ENV \
+  TASK_OUTPUT="./out" \
+  TASK_OUTPUT_REPLACE="./out-replace" \
+  BUILD=/dapper/build
+
+ENV \
+  DAPPER_SOURCE=/src \
+  DAPPER_OUTPUT="${TASK_OUTPUT} ${TASK_OUTPUT_REPLACE}"
+
+ENTRYPOINT ["/dapper/build/entrypoint"]
+WORKDIR "${BUILD}"
+COPY /scripts/entrypoint entrypoint
+COPY requirements/build.* requirements/
+RUN set -xeu \
+  && pip install -r requirements/build.txt \
+  && mkdir -p "${DAPPER_OUTPUT}"
+WORKDIR "${DAPPER_SOURCE}"
