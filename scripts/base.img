@@ -1,0 +1,96 @@
+#!/usr/bin/env python
+import functools
+import logging
+import os
+import shutil
+import subprocess
+import sys
+import tarfile
+import time
+from pathlib import Path
+
+import click
+import requests
+from tqdm import tqdm
+from urllib3 import HTTPResponse
+
+from archpi.img import losetup_img, mount_disks
+
+B = 1
+KB = B * 1024
+MB = KB * 1024
+GB = MB * 1024
+
+block = b'\0' * MB
+
+rootfs_url = 'http://os.archlinuxarm.org/os/ArchLinuxARM-rpi-aarch64-latest.tar.gz'
+
+script = Path(__file__)
+
+
+@click.command()
+@click.option('--img-size-gb', default=2.0)
+def main(img_size_gb):
+    logging.basicConfig(stream=sys.stderr, level=os.environ.get('LOG_LEVEL', 'INFO'))
+
+    out = Path(os.environ['TASK_OUTPUT']).absolute()
+
+    out_img = out / script.name
+
+    tmp = Path('/tmp')
+    disk = tmp / script.name
+    with disk.open(mode='wb') as f:
+        size = int(img_size_gb * GB) // len(block)
+        for _ in tqdm(range(size), total=size, desc=f'Filling {disk}',
+                      unit='block', unit_scale=True):
+            f.write(block)
+    with losetup_img(disk) as lo, \
+            mount_disks(format_disk(lo), '/boot', '/') as mnt:
+        response = requests.get(rootfs_url, stream=True)
+        raw: HTTPResponse = response.raw
+        tar = tarfile.open(fileobj=tqdm_stream_response(raw, desc='downloading & unpacking rootfs'), mode='r:gz')
+
+        try:
+            tar.extractall(path=mnt)
+        finally:
+            while response.raw.read(1024):
+                pass
+            tar.close()
+
+        fstab = lo / 'etc/fstab'
+        fstab.write_text(fstab.read_text().replace('mmcblk0', 'mmcblk1'))
+    shutil.move(disk, out_img)
+
+
+def format_disk(lo: Path):
+    # see https://archlinuxarm.org/platforms/armv8/broadcom/raspberry-pi-4
+    # devices not appearing inside Docker, see https://github.com/moby/moby/issues/27886
+    subprocess.run(['fdisk', lo], input='\n'.join([
+        *'n p 1 \0 +200M t c'.split(),
+        *'n p 2 \0 \0'.split(),
+        'w'
+    ]).replace('\0', ''), check=True, encoding='utf8')
+    subprocess.check_call(['sync'])
+    while not (part := lo.with_name(f'{lo.name}p1')).exists():
+        logging.info(f'{part} not yet available...')
+        time.sleep(5)
+    subprocess.check_call(['mkfs.vfat', f'{lo}p1'])
+    subprocess.check_call(['mkfs.ext4', f'{lo}p2'])
+    return lo
+
+
+# see https://stackoverflow.com/a/3668977
+def tqdm_stream_response(self: HTTPResponse, desc=''):
+    def read(size, **kwargs):
+        progress.update(size)
+        return original_read(size, **kwargs)
+
+    progress = tqdm(total=self.length_remaining, desc=desc,
+                    unit='B', unit_scale=True, unit_divisor=1024)
+    original_read = self.read
+    self.read = functools.partial(read)
+    return self
+
+
+if __name__ == '__main__':
+    main()

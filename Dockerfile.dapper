@@ -1,18 +1,33 @@
-FROM python:3.9
+FROM nazarewk/archlinux
 ENV \
   TASK_OUTPUT="./out" \
   TASK_OUTPUT_REPLACE="./out-replace" \
   BUILD=/dapper/build
 
-ENV \
-  DAPPER_SOURCE=/src \
-  DAPPER_OUTPUT="${TASK_OUTPUT} ${TASK_OUTPUT_REPLACE}"
-
 ENTRYPOINT ["/dapper/build/entrypoint"]
 WORKDIR "${BUILD}"
+RUN set -xeu && export DEBIAN_FRONTEND=noninteractive \
+  && yay -Syu --noconfirm \
+    binfmt-qemu-static \
+    dosfstools \
+    e2fsprogs \
+    python \
+    python-pip \
+    qemu-user-static-bin \
+#    zfs-utils \
+#    zfs-dkms \
+  && docker-build-cleanup
+
+USER root
 COPY /scripts/entrypoint entrypoint
 COPY requirements/build.* requirements/
 RUN set -xeu \
-  && pip install -r requirements/build.txt \
-  && mkdir -p "${DAPPER_OUTPUT}"
+  && pip install -r requirements/build.txt
+
+ENV \
+  DAPPER_SOURCE=/src \
+  DAPPER_OUTPUT="${TASK_OUTPUT} ${TASK_OUTPUT_REPLACE}" \
+  DAPPER_RUN_ARGS="--privileged -v /dev:/dev"
+ENV \
+  PYTHONPATH="/src/lib"
 WORKDIR "${DAPPER_SOURCE}"

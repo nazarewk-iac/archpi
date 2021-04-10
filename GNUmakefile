@@ -2,6 +2,9 @@ SHELL := $(shell which bash)
 .SHELLFLAGS := -xeEuo pipefail -c
 .ONESHELL:
 
+export BUILDKIT_PROGRESS=plain
+export DOCKER_BUILDKIT=1
+
 TARGETS := $(shell ls scripts)
 IN_PLACE_TARGETS := $(shell echo scripts/.* | sed 's#scripts/\.*##g')
 
@@ -14,7 +17,7 @@ IN_PLACE_TARGETS := $(shell echo scripts/.* | sed 's#scripts/\.*##g')
 
 $(TARGETS): .dapper
 	@[[ -d out-replace ]] && rm -rf out-replace
-	./.dapper $@
+	./.dapper -m bind $@
 	@[[ -d out-replace ]] && cp -a out-replace/. ./
 
 .DEFAULT_GOAL := ci
