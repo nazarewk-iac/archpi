@@ -1,5 +1,7 @@
 import contextlib
 import logging
+import subprocess
+import time
 from pathlib import Path
 
 from archpi import cmd
@@ -31,4 +33,11 @@ def mount_disks(lo: Path, *mount_points):
         yield mnt
     finally:
         cmd.run('df', '-h')
-        cmd.run('umount', '--recursive', mnt)
+        for _ in range(3):
+            try:
+                cmd.run('umount', '--recursive', mnt)
+                return
+            except subprocess.CalledProcessError:
+                time.sleep(5)
+        cmd.run('umount', '--recursive', '--lazy', mnt)
+        cmd.run('umount', '--recursive', '--force', mnt, check=False)

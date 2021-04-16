@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import os
+import pwd
 import shutil
 import sys
 import tarfile
@@ -30,7 +31,8 @@ tmp = Path('tmp')
 
 
 @click.command()
-def main():
+@click.option('--github-username', default='nazarewk')
+def main(github_username):
     log.setup()
 
     out = Path(os.environ['TASK_OUTPUT']).absolute()
@@ -44,13 +46,38 @@ def main():
     with losetup_img(disk) as lo, \
             mount_disks(lo, *config.partition_layout) as mnt, \
             in_chroot(mnt):
+        cmd.run('pacman', '-Syu', '--noconfirm')
         install_yay()
+        cmd.run('yay', '-S', '--noconfirm',
+                'vim', 'jq', 'python', 'k3s-bin')
+        cmd.run('userdel', '--remove', 'alarm')
+        setup_user(github_username)
+
     shutil.move(disk, out_img)
+
+
+def setup_user(github_username: str):
+    cmd.run('useradd',
+            '--create-home',
+            '--groups', 'sudo',
+            github_username)
+    user: pwd.struct_passwd = pwd.getpwnam(github_username)
+    home = Path(user.pw_dir)
+    authorized_keys = home / '.ssh' / 'authorized_keys'
+    authorized_keys.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    authorized_keys.touch(mode=0o644)
+    authorized_keys.write_text('\n'.join(
+        data['key']
+        for data in requests.get(
+            f'https://api.github.com/users/{github_username}/keys',
+        ).json()))
+    for path in home.rglob('*'):
+        os.chown(path, user.pw_uid, user.pw_gid)
 
 
 def install_yay():
     cmd.run(
-        'pacman', '-Syu', '--noconfirm',
+        'pacman', '-S', '--noconfirm',
         'git',
         'sudo',
         'pacman',

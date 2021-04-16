@@ -14,7 +14,7 @@ import requests
 from tqdm import tqdm
 from urllib3 import HTTPResponse
 
-from archpi import cmd, config, log
+from archpi import cmd, config, log, chroot
 from archpi.img import losetup_img, mount_disks
 from archpi.tqdm import file_progress, stream_response
 
@@ -66,6 +66,14 @@ def main(img_size_gb):
 
         fstab = mnt / 'etc/fstab'
         fstab.write_text(fstab.read_text().replace('mmcblk0', 'mmcblk1'))
+        with chroot.in_chroot(mnt):
+            cmd.run('pacman-key', '--init')
+            cmd.run('pacman-key', '--populate', 'archlinuxarm')
+            cmd.run('pacman', '-Syy')
+            cmd.run('pacman', '-S', '--noconfirm', 'archlinuxarm-keyring', 'archlinux-keyring')
+            cmd.run('pacman', '-R', '--noconfirm', 'linux-aarch64', 'uboot-raspberrypi')
+            cmd.run('pacman', '-Syu', '--noconfirm')
+            cmd.run('pacman', '-S', '--noconfirm', 'linux-raspberrypi4', 'linux-raspberrypi4-headers')
     shutil.move(disk, out_img)
 
 
@@ -84,8 +92,6 @@ def format_disk(lo: Path):
     cmd.run('mkfs.vfat', f'{lo}p1')
     cmd.run('mkfs.ext4', f'{lo}p2')
     return lo
-
-
 
 
 if __name__ == '__main__':

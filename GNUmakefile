@@ -24,3 +24,6 @@ $(TARGETS): .dapper
 
 .PHONY: $(TARGETS) $(IN_PLACE_TARGETS)
 
+burn:
+	[[ -e /dev/mmcblk0 ]] || exit 1
+	sudo dd if=out/sdcard.img of=/dev/mmcblk0 bs=4K status=progress
