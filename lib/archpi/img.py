@@ -1,16 +1,21 @@
 import contextlib
-import subprocess
+import logging
 from pathlib import Path
+
+from archpi import cmd
+
+logger = logging.getLogger(__name__)
 
 
 @contextlib.contextmanager
 def losetup_img(img: Path) -> Path:
-    lo = Path(subprocess.check_output(['losetup', '-f'], encoding='utf8').strip())
-    subprocess.check_call(['losetup', '-P', lo, img])
+    proc = cmd.run('losetup', '-f', capture_stdout=True)
+    lo = Path(proc.stdout.strip())
+    cmd.run('losetup', '-P', lo, img)
     try:
         yield lo
     finally:
-        subprocess.check_call(['losetup', '-d', lo])
+        cmd.run('losetup', '-d', lo)
 
 
 @contextlib.contextmanager
@@ -19,10 +24,11 @@ def mount_disks(lo: Path, *mount_points):
     paths = sorted(enumerate(mount_points, start=1), key=lambda e: e[1])
     for partnum, path in paths:
         at = mnt / path.lstrip('/')
+        logger.info(f'Mounting {path} at {at}')
         at.mkdir(parents=True, exist_ok=True)
-        subprocess.check_call(['mount', f'{lo}p{partnum}', mnt])
+        cmd.run('mount', f'{lo}p{partnum}', at)
     try:
         yield mnt
     finally:
-        subprocess.check_call(['df', '-h'])
-        subprocess.check_call(['umount', '-R', mnt])
+        cmd.run('df', '-h')
+        cmd.run('umount', '--recursive', mnt)

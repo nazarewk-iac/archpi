@@ -17,7 +17,7 @@ script = scripts / sys.argv[1]
 args = sys.argv
 if script.exists():
     args = [script, *sys.argv[2:]]
-subprocess.run(args)
+subprocess.run(args, check=True)
 
 for path in itertools.chain(Path.cwd().rglob('*'), out):
     os.chown(path, uid, gid)

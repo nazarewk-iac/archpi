@@ -3,11 +3,14 @@ import os
 import subprocess
 from pathlib import Path
 
+from archpi import cmd, log
+
 
 def main():
+    log.setup()
     out = Path(os.environ['TASK_OUTPUT_REPLACE'])
     requirements = Path('requirements')
-    subprocess.run(['pip-compile-multi'])
+    cmd.run('pip-compile-multi')
     for file in requirements.glob('*.txt'):
         to = out / file
         to.parent.mkdir(parents=True, exist_ok=True)

@@ -1,0 +1,75 @@
+#!/usr/bin/env python
+import os
+import shutil
+import sys
+import tarfile
+import traceback
+from pathlib import Path
+
+import click
+import ipdb
+import requests
+
+from archpi import cmd, config, log, tqdm
+from archpi.chroot import in_chroot
+from archpi.dirs import in_tmpdir
+from archpi.img import losetup_img, mount_disks
+
+B = 1
+KB = B * 1024
+MB = KB * 1024
+GB = MB * 1024
+
+block = b'\0' * MB
+
+rootfs_url = 'http://os.archlinuxarm.org/os/ArchLinuxARM-rpi-aarch64-latest.tar.gz'
+rootfs_name = rootfs_url.split('/')[-1]
+
+script = Path(__file__)
+tmp = Path('tmp')
+
+
+@click.command()
+def main():
+    log.setup()
+
+    out = Path(os.environ['TASK_OUTPUT']).absolute()
+
+    tmp.mkdir(parents=True, exist_ok=True)
+    out_img = out / script.name
+
+    disk = tmp / script.name
+    shutil.copy(out / 'base.img', disk)
+
+    with losetup_img(disk) as lo, \
+            mount_disks(lo, *config.partition_layout) as mnt, \
+            in_chroot(mnt):
+        install_yay()
+    shutil.move(disk, out_img)
+
+
+def install_yay():
+    cmd.run(
+        'pacman', '-Syu', '--noconfirm',
+        'git',
+        'sudo',
+        'pacman',
+        'pacman-contrib',
+    )
+    url = 'https://aur.archlinux.org/cgit/aur.git/snapshot/yay-bin.tar.gz'
+    response = requests.get(url, stream=True)
+    with in_tmpdir(), tarfile.open(
+            fileobj=tqdm.stream_response(response.raw, desc='reading archive'),
+            mode='r|gz') as tar:
+        tar.extractall()
+        os.chdir('yay-bin')
+        cmd.run('makepkg', '-si', '--noconfirm')
+
+
+if __name__ == '__main__':
+    try:
+        main()
+    except Exception:
+        extype, value, tb = sys.exc_info()
+        traceback.print_exc()
+        ipdb.post_mortem(tb)
